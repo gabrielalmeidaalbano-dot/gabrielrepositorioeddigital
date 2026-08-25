@@ -2,8 +2,8 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Futebol JS - Edição Energia</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Futebol JS - Física & Gol Pro</title>
 <style>
     * { box-sizing: border-box; user-select: none; }
     body {
@@ -43,7 +43,6 @@
         width: 100%;
         height: 100%;
         background: linear-gradient(90deg, #00c6ff, #0072ff);
-        transition: width 0.1s linear;
     }
     canvas {
         background: #159447;
@@ -94,20 +93,25 @@ function tocarSom(freq, tipo, duracao) {
 }
 
 const CONFIG = {
-    atrito: 0.982,
-    topGol: 220,
-    bottomGol: 380,
-    profundidadeGol: 30
+    atritoBola: 0.985,
+    atritoJogador: 0.88,
+    aceleracao: 0.8,
+    topGol: 210,
+    bottomGol: 390,
+    larguraGol: 180,
+    profundidadeGol: 40
 };
 
 let estadoJogo = "JOGANDO";
 let textoGolAnim = "";
+let animRedeEsquerda = 0;
+let animRedeDireita = 0;
 
 const jogador = { 
-    x: 250, y: 300, vx: 0, vy: 0, raio: 22, vel: 5.5, cor: "#1683ff",
+    x: 250, y: 300, vx: 0, vy: 0, raio: 22, velMax: 5.5, cor: "#1683ff",
     energia: 100, maxEnergia: 100 
 };
-const cpu = { x: 750, y: 300, vx: 0, vy: 0, raio: 22, vel: 3.8, cor: "#ff3333" };
+const cpu = { x: 750, y: 300, vx: 0, vy: 0, raio: 22, velMax: 3.8, cor: "#ff3333" };
 const bola = { x: 500, y: 300, vx: 0, vy: 0, raio: 12 };
 
 let golsJogador = 0;
@@ -154,19 +158,32 @@ function resetarPartidaCompleta() {
 function distancia(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 
 function chutar(p) {
-    // Requer pelo menos 15 de energia para um chute forte
-    if (p.energia >= 15 && distancia(p, bola) < p.raio + bola.raio + 15) {
+    if (p.energia >= 10 && distancia(p, bola) < p.raio + bola.raio + 12) {
         let dx = bola.x - p.x;
         let dy = bola.y - p.y;
         let dist = Math.hypot(dx, dy) || 1;
         bola.vx = (dx / dist) * 16;
         bola.vy = (dy / dist) * 16;
-        p.energia -= 15;
+        p.energia -= 10;
         tocarSom(300, 'square', 0.15);
     }
 }
 
 function resolverColisoes() {
+    // Colisão Jogador x CPU
+    let dxP = cpu.x - jogador.x;
+    let dyP = cpu.y - jogador.y;
+    let distP = Math.hypot(dxP, dyP);
+    if (distP < jogador.raio + cpu.raio) {
+        let ang = Math.atan2(dyP, dxP);
+        let sobreposicao = (jogador.raio + cpu.raio) - distP;
+        jogador.x -= Math.cos(ang) * sobreposicao * 0.5;
+        jogador.y -= Math.sin(ang) * sobreposicao * 0.5;
+        cpu.x += Math.cos(ang) * sobreposicao * 0.5;
+        cpu.y += Math.sin(ang) * sobreposicao * 0.5;
+    }
+
+    // Colisão Jogadores x Bola
     [jogador, cpu].forEach(p => {
         let dx = bola.x - p.x;
         let dy = bola.y - p.y;
@@ -177,34 +194,45 @@ function resolverColisoes() {
             let angulo = Math.atan2(dy, dx);
             bola.x = p.x + Math.cos(angulo) * minDist;
             bola.y = p.y + Math.sin(angulo) * minDist;
-            bola.vx = Math.cos(angulo) * (Math.hypot(p.vx, p.vy) + 3);
-            bola.vy = Math.sin(angulo) * (Math.hypot(p.vx, p.vy) + 3);
+            
+            let velImpacto = Math.hypot(p.vx, p.vy);
+            bola.vx = Math.cos(angulo) * (velImpacto + 3);
+            bola.vy = Math.sin(angulo) * (velImpacto + 3);
             tocarSom(150, 'triangle', 0.08);
         }
     });
 }
 
 function moverJogador() {
-    let dx = 0, dy = 0;
-    if (teclas["w"] || teclas["arrowup"]) dy--;
-    if (teclas["s"] || teclas["arrowdown"]) dy++;
-    if (teclas["a"] || teclas["arrowleft"]) dx--;
-    if (teclas["d"] || teclas["arrowright"]) dx++;
+    let inputX = 0, inputY = 0;
+    if (teclas["w"] || teclas["arrowup"]) inputY--;
+    if (teclas["s"] || teclas["arrowdown"]) inputY++;
+    if (teclas["a"] || teclas["arrowleft"]) inputX--;
+    if (teclas["d"] || teclas["arrowright"]) inputX++;
 
-    // Regeneração constante de energia
-    if (jogador.energia < jogador.maxEnergia) {
-        jogador.energia = Math.min(jogador.maxEnergia, jogador.energia + 0.15);
+    // Normalização diagonal
+    if (inputX !== 0 && inputY !== 0) {
+        inputX *= 0.7071;
+        inputY *= 0.7071;
     }
 
-    if ((dx !== 0 || dy !== 0) && jogador.energia > 2) {
-        let len = Math.hypot(dx, dy);
-        jogador.vx = (dx / len) * jogador.vel;
-        jogador.vy = (dy / len) * jogador.vel;
-        jogador.energia -= 0.1; // Consumo de energia ao mover
-    } else { 
-        jogador.vx = 0; 
-        jogador.vy = 0; 
+    // Aceleração com física de inércia
+    if ((inputX !== 0 || inputY !== 0) && jogador.energia > 2) {
+        jogador.vx += inputX * CONFIG.aceleracao;
+        jogador.vy += inputY * CONFIG.aceleracao;
+        jogador.energia = Math.max(0, jogador.energia - 0.08);
+    } else {
+        jogador.energia = Math.min(jogador.maxEnergia, jogador.energia + 0.2);
     }
+
+    // Limitação de velocidade máxima e atrito
+    let velAtual = Math.hypot(jogador.vx, jogador.vy);
+    if (velAtual > jogador.velMax) {
+        jogador.vx = (jogador.vx / velAtual) * jogador.velMax;
+        jogador.vy = (jogador.vy / velAtual) * jogador.velMax;
+    }
+    jogador.vx *= CONFIG.atritoJogador;
+    jogador.vy *= CONFIG.atritoJogador;
 
     jogador.x += jogador.vx;
     jogador.y += jogador.vy;
@@ -224,10 +252,21 @@ function moverCPU() {
     let dist = Math.hypot(dx, dy);
 
     if (dist > 5) {
-        cpu.vx = (dx / dist) * cpu.vel;
-        cpu.vy = (dy / dist) * cpu.vel;
-        cpu.x += cpu.vx; cpu.y += cpu.vy;
+        let dirX = (dx / dist);
+        let dirY = (dy / dist);
+        cpu.vx += dirX * (CONFIG.aceleracao * 0.7);
+        cpu.vy += dirY * (CONFIG.aceleracao * 0.7);
     }
+
+    let velAtual = Math.hypot(cpu.vx, cpu.vy);
+    if (velAtual > cpu.velMax) {
+        cpu.vx = (cpu.vx / velAtual) * cpu.velMax;
+        cpu.vy = (cpu.vy / velAtual) * cpu.velMax;
+    }
+    cpu.vx *= CONFIG.atritoJogador;
+    cpu.vy *= CONFIG.atritoJogador;
+
+    cpu.x += cpu.vx; cpu.y += cpu.vy;
     limitarPosicao(cpu);
 
     if (distancia(cpu, bola) < cpu.raio + bola.raio + 8) {
@@ -246,38 +285,60 @@ function limitarPosicao(p) {
 
 function moverBola() {
     bola.x += bola.vx; bola.y += bola.vy;
-    bola.vx *= CONFIG.atrito; bola.vy *= CONFIG.atrito;
+    bola.vx *= CONFIG.atritoBola; bola.vy *= CONFIG.atritoBola;
 
-    // GOL APENAS QUANDO A BOLA ENCOSTA NA PAREDE DO FUNDO DO GOL
-    let dentroDoGolY = bola.y > CONFIG.topGol && bola.y < CONFIG.bottomGol;
+    let dentroDaBocaDoGol = bola.y > CONFIG.topGol && bola.y < CONFIG.bottomGol;
 
-    // Parede do fundo do gol da esquerda (Gol da CPU)
-    if (dentroDoGolY && bola.x - bola.raio <= -CONFIG.profundidadeGol) {
+    // --- NOVO SISTEMA DE DETECÇÃO DE GOL ---
+    // Gol da CPU (Lado Esquerdo): Bola precisa ultrapassar 100% a linha (x < 10 - raio)
+    if (dentroDaBocaDoGol && (bola.x + bola.raio < 10)) {
+        animRedeEsquerda = 15;
         registrarGol("CPU");
         return;
     }
     
-    // Parede do fundo do gol da direita (Gol do Jogador)
-    if (dentroDoGolY && bola.x + bola.raio >= canvas.width + CONFIG.profundidadeGol) {
+    // Gol do Jogador (Lado Direito): Bola precisa ultrapassar 100% a linha (x > width - 10 + raio)
+    if (dentroDaBocaDoGol && (bola.x - bola.raio > canvas.width - 10)) {
+        animRedeDireita = 15;
         registrarGol("Jogador");
         return;
     }
 
-    // Colisão com as traves (paredes superiores/inferiores da rede)
-    if ((bola.x < 10 || bola.x > canvas.width - 10) && dentroDoGolY) {
+    // Colisão com as Traves (Postes do Gol)
+    const traves = [
+        { x: 10, y: CONFIG.topGol }, { x: 10, y: CONFIG.bottomGol },
+        { x: canvas.width - 10, y: CONFIG.topGol }, { x: canvas.width - 10, y: CONFIG.bottomGol }
+    ];
+
+    traves.forEach(trave => {
+        let d = distancia(bola, trave);
+        if (d < bola.raio + 6) {
+            let ang = Math.atan2(bola.y - trave.y, bola.x - trave.x);
+            bola.vx = Math.cos(ang) * 8;
+            bola.vy = Math.sin(ang) * 8;
+            tocarSom(400, 'square', 0.1);
+        }
+    });
+
+    // Rebate na rede interna se estiver dentro do espaço do gol
+    if (bola.x < 10 || bola.x > canvas.width - 10) {
         if (bola.y - bola.raio <= CONFIG.topGol || bola.y + bola.raio >= CONFIG.bottomGol) {
             bola.vy *= -1;
         }
+        if (bola.x - bola.raio <= -CONFIG.profundidadeGol || bola.x + bola.raio >= canvas.width + CONFIG.profundidadeGol) {
+            bola.vx *= -1;
+        }
     } else {
-        // Colisão com teto e chão do campo
+        // Colisão com as paredes laterais do campo fora do gol
         if (bola.y - bola.raio < 10 || bola.y + bola.raio > canvas.height - 10) {
             bola.vy *= -1;
             tocarSom(200, 'sine', 0.05);
         }
-        // Paredes laterais fora da área do gol
-        if (bola.x - bola.raio < 10 || bola.x + bola.raio > canvas.width - 10) {
-            bola.vx *= -1;
-            tocarSom(200, 'sine', 0.05);
+        if (!dentroDaBocaDoGol) {
+            if (bola.x - bola.raio < 10 || bola.x + bola.raio > canvas.width - 10) {
+                bola.vx *= -1;
+                tocarSom(200, 'sine', 0.05);
+            }
         }
     }
 }
@@ -287,7 +348,7 @@ function registrarGol(autor) {
     estadoJogo = "GOL";
     tocarSom(600, 'sawtooth', 0.4);
 
-    if (autor === "Jogador") { golsJogador++; textoGolAnim = "GOL SEU! ⚽"; }
+    if (autor === "Jogador") { golsJogador++; textoGolAnim = "GOLAAAAÇO! ⚽"; }
     else { golsCPU++; textoGolAnim = "GOL DA CPU! 🤖"; }
 
     atualizarPlacar();
@@ -302,10 +363,9 @@ function atualizarPlacar() {
 }
 
 function resetarPosicoes() {
-    jogador.x = 250; jogador.y = 300;
-    cpu.x = 750; cpu.y = 300;
-    bola.x = 500; bola.y = 300;
-    bola.vx = 0; bola.vy = 0;
+    jogador.x = 250; jogador.y = 300; jogador.vx = 0; jogador.vy = 0;
+    cpu.x = 750; cpu.y = 300; cpu.vx = 0; cpu.vy = 0;
+    bola.x = 500; bola.y = 300; bola.vx = 0; bola.vy = 0;
 }
 
 function desenharCampo() {
@@ -316,7 +376,7 @@ function desenharCampo() {
     ctx.lineWidth = 4;
     ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
 
-    // Linha de meio campo e círculo
+    // Linha central
     ctx.beginPath();
     ctx.moveTo(canvas.width / 2, 10); ctx.lineTo(canvas.width / 2, canvas.height - 10);
     ctx.arc(canvas.width / 2, canvas.height / 2, 70, 0, Math.PI * 2);
@@ -326,13 +386,26 @@ function desenharCampo() {
     ctx.strokeRect(10, 150, 120, 300);
     ctx.strokeRect(canvas.width - 130, 150, 120, 300);
 
-    // Gols Recuados (Rede)
-    ctx.fillStyle = "rgba(0,0,0,0.2)";
-    ctx.fillRect(-CONFIG.profundidadeGol, CONFIG.topGol, CONFIG.profundidadeGol, 160);
-    ctx.fillRect(canvas.width, CONFIG.topGol, CONFIG.profundidadeGol, 160);
-    
-    ctx.strokeRect(-CONFIG.profundidadeGol, CONFIG.topGol, CONFIG.profundidadeGol, 160);
-    ctx.strokeRect(canvas.width, CONFIG.topGol, CONFIG.profundidadeGol, 160);
+    // Redes dos Gols (Com animação ao marcar)
+    let offsetE = animRedeEsquerda > 0 ? (Math.random() * 4 - 2) : 0;
+    let offsetD = animRedeDireita > 0 ? (Math.random() * 4 - 2) : 0;
+    if (animRedeEsquerda > 0) animRedeEsquerda--;
+    if (animRedeDireita > 0) animRedeDireita--;
+
+    ctx.fillStyle = "rgba(255,255,255,0.15)";
+    ctx.fillRect(-CONFIG.profundidadeGol + offsetE, CONFIG.topGol, CONFIG.profundidadeGol, CONFIG.larguraGol);
+    ctx.strokeRect(-CONFIG.profundidadeGol + offsetE, CONFIG.topGol, CONFIG.profundidadeGol, CONFIG.larguraGol);
+
+    ctx.fillRect(canvas.width + offsetD, CONFIG.topGol, CONFIG.profundidadeGol, CONFIG.larguraGol);
+    ctx.strokeRect(canvas.width + offsetD, CONFIG.topGol, CONFIG.profundidadeGol, CONFIG.larguraGol);
+
+    // Traves (Postes)
+    ctx.fillStyle = "#fff";
+    [ [10, CONFIG.topGol], [10, CONFIG.bottomGol], [canvas.width - 10, CONFIG.topGol], [canvas.width - 10, CONFIG.bottomGol] ].forEach(t => {
+        ctx.beginPath();
+        ctx.arc(t[0], t[1], 6, 0, Math.PI * 2);
+        ctx.fill();
+    });
 }
 
 function desenharEntidades() {
@@ -373,7 +446,7 @@ function desenharOverlays() {
 function loop() {
     desenharCampo();
 
-    if (estadoJogo === "JOGANDO") {
+    if (estadoJogo === "JOGANDO" || estadoJogo === "GOL") {
         moverJogador();
         moverCPU();
         moverBola();
