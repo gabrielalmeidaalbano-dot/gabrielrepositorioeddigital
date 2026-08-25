@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Futebol JS - Física & Gol Pro</title>
+<title>Futebol JS - Seleção de Dificuldade</title>
 <style>
     * { box-sizing: border-box; user-select: none; }
     body {
@@ -31,6 +31,7 @@
     }
     #placar { font-size: 26px; font-weight: 800; }
     #tempo { font-size: 20px; color: #ffca28; font-weight: bold; }
+    #dificuldade-hud { font-size: 14px; color: #8b949e; text-transform: uppercase; font-weight: bold; }
     #bar-container {
         width: 120px;
         height: 14px;
@@ -44,6 +45,9 @@
         height: 100%;
         background: linear-gradient(90deg, #00c6ff, #0072ff);
     }
+    #canvas-container {
+        position: relative;
+    }
     canvas {
         background: #159447;
         border: 4px solid #fff;
@@ -51,7 +55,37 @@
         box-shadow: 0 12px 30px rgba(0,0,0,0.7);
         max-width: 95vw;
         max-height: 70vh;
+        display: block;
     }
+    /* Overlay HTML para Menu de Dificuldade */
+    #menu-dificuldade {
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(13, 17, 23, 0.9);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 15px;
+        border-radius: 8px;
+        z-index: 10;
+    }
+    #menu-dificuldade h2 { font-size: 32px; margin: 0 0 10px 0; color: #fff; }
+    .btn-dif {
+        width: 200px;
+        padding: 12px;
+        font-size: 18px;
+        font-weight: bold;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: transform 0.1s, background 0.2s;
+    }
+    .btn-dif:hover { transform: scale(1.05); }
+    .btn-facil { background: #2ea44f; }
+    .btn-medio { background: #d97706; }
+    .btn-dificil { background: #dc2626; }
     p { color: #8b949e; margin-top: 10px; font-size: 14px; }
 </style>
 </head>
@@ -60,15 +94,25 @@
 <div id="hud">
     <div id="placar">Você 0 - 0 CPU</div>
     <div id="tempo">02:00</div>
+    <div id="dificuldade-hud">MÉDIO</div>
     <div>
         <small style="display:block; font-size:10px; color:#aaa;">ENERGIA</small>
         <div id="bar-container"><div id="bar-energia"></div></div>
     </div>
 </div>
 
-<canvas id="campo" width="1000" height="600"></canvas>
+<div id="canvas-container">
+    <canvas id="campo" width="1000" height="600"></canvas>
+    
+    <div id="menu-dificuldade">
+        <h2>Escolha a Dificuldade</h2>
+        <button class="btn-dif btn-facil" onclick="selecionarDificuldade('FACIL')">1 - Fácil</button>
+        <button class="btn-dif btn-medio" onclick="selecionarDificuldade('MEDIO')">2 - Médio</button>
+        <button class="btn-dif btn-dificil" onclick="selecionarDificuldade('DIFICIL')">3 - Difícil</button>
+    </div>
+</div>
 
-<p>🔵 Mover: WASD / Setas | ⚽ Chutar: Espaço | 🔄 Reiniciar: R</p>
+<p>🔵 Mover: WASD / Setas | ⚽ Chutar: Espaço | 🔄 Reiniciar Menu: R</p>
 
 <script>
 const canvas = document.getElementById("campo");
@@ -76,6 +120,8 @@ const ctx = canvas.getContext("2d");
 const placarEl = document.getElementById("placar");
 const tempoEl = document.getElementById("tempo");
 const barEnergiaEl = document.getElementById("bar-energia");
+const difHudEl = document.getElementById("dificuldade-hud");
+const menuDifEl = document.getElementById("menu-dificuldade");
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 function tocarSom(freq, tipo, duracao) {
@@ -102,16 +148,32 @@ const CONFIG = {
     profundidadeGol: 40
 };
 
-let estadoJogo = "JOGANDO";
+// Configurações por nível de dificuldade
+const NIVEIS_DIFICULDADE = {
+    FACIL: { cpuVel: 2.8, cpuChuteForce: 10, barreiraVel: 2.0, barreiraAltura: 60, nome: "Fácil" },
+    MEDIO: { cpuVel: 3.8, cpuChuteForce: 12, barreiraVel: 3.2, barreiraAltura: 80, nome: "Médio" },
+    DIFICIL: { cpuVel: 4.8, cpuChuteForce: 15, barreiraVel: 4.5, barreiraAltura: 100, nome: "Difícil" }
+};
+
+let dificuldadeAtual = NIVEIS_DIFICULDADE.MEDIO;
+let estadoJogo = "MENU";
 let textoGolAnim = "";
-let animRedeEsquerda = 0;
-let animRedeDireita = 0;
 
 const jogador = { 
     x: 250, y: 300, vx: 0, vy: 0, raio: 22, velMax: 5.5, cor: "#1683ff",
     energia: 100, maxEnergia: 100 
 };
 const cpu = { x: 750, y: 300, vx: 0, vy: 0, raio: 22, velMax: 3.8, cor: "#ff3333" };
+
+const barreiraCPU = {
+    x: 930,
+    y: 300,
+    largura: 16,
+    altura: 80,
+    vel: 3.2,
+    cor: "#888888"
+};
+
 const bola = { x: 500, y: 300, vx: 0, vy: 0, raio: 12 };
 
 let golsJogador = 0;
@@ -126,12 +188,47 @@ document.addEventListener("keydown", e => {
         chutar(jogador);
         e.preventDefault();
     }
-    if (e.key.toLowerCase() === "r") resetarPartidaCompleta();
+    if (estadoJogo === "MENU") {
+        if (e.key === "1") selecionarDificuldade('FACIL');
+        if (e.key === "2") selecionarDificuldade('MEDIO');
+        if (e.key === "3") selecionarDificuldade('DIFICIL');
+    }
+    if (e.key.toLowerCase() === "r") voltarAoMenu();
 });
 
 document.addEventListener("keyup", e => teclas[e.key.toLowerCase()] = false);
 
-function iniciarTimer() {
+function selecionarDificuldade(nivelKey) {
+    dificuldadeAtual = NIVEIS_DIFICULDADE[nivelKey];
+    
+    // Aplicar atributos da CPU e Barreira
+    cpu.velMax = dificuldadeAtual.cpuVel;
+    barreiraCPU.vel = dificuldadeAtual.barreiraVel;
+    barreiraCPU.altura = dificuldadeAtual.barreiraAltura;
+    difHudEl.textContent = dificuldadeAtual.nome;
+    
+    menuDifEl.style.display = "none";
+    iniciarPartida();
+}
+
+function voltarAoMenu() {
+    estadoJogo = "MENU";
+    menuDifEl.style.display = "flex";
+    if (timerInterval) clearInterval(timerInterval);
+    tempoEl.textContent = "02:00";
+    golsJogador = 0; golsCPU = 0;
+    atualizarPlacar();
+    resetarPosicoes();
+}
+
+function iniciarPartida() {
+    golsJogador = 0; golsCPU = 0;
+    tempoRestante = 120;
+    jogador.energia = 100;
+    estadoJogo = "JOGANDO";
+    atualizarPlacar();
+    resetarPosicoes();
+    
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(() => {
         if (estadoJogo === "JOGANDO") {
@@ -142,17 +239,6 @@ function iniciarTimer() {
             if (tempoRestante <= 0) estadoJogo = "FIM";
         }
     }, 1000);
-}
-iniciarTimer();
-
-function resetarPartidaCompleta() {
-    golsJogador = 0; golsCPU = 0;
-    tempoRestante = 120;
-    jogador.energia = 100;
-    estadoJogo = "JOGANDO";
-    atualizarPlacar();
-    resetarPosicoes();
-    iniciarTimer();
 }
 
 function distancia(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
@@ -169,8 +255,41 @@ function chutar(p) {
     }
 }
 
+function moverBarreiraCPU() {
+    let dy = bola.y - barreiraCPU.y;
+    if (Math.abs(dy) > 5) {
+        barreiraCPU.y += Math.sign(dy) * barreiraCPU.vel;
+    }
+    let meioAltura = barreiraCPU.altura / 2;
+    barreiraCPU.y = Math.max(CONFIG.topGol + meioAltura, Math.min(CONFIG.bottomGol - meioAltura, barreiraCPU.y));
+}
+
+function resolverColisaoBarreira() {
+    let bx = barreiraCPU.x - barreiraCPU.largura / 2;
+    let by = barreiraCPU.y - barreiraCPU.altura / 2;
+    let bw = barreiraCPU.largura;
+    let bh = barreiraCPU.altura;
+
+    let closestX = Math.max(bx, Math.min(bola.x, bx + bw));
+    let closestY = Math.max(by, Math.min(bola.y, by + bh));
+
+    let dx = bola.x - closestX;
+    let dy = bola.y - closestY;
+    let dist = Math.hypot(dx, dy);
+
+    if (dist < bola.raio) {
+        if (Math.abs(dx) > Math.abs(dy)) {
+            bola.vx *= -0.8;
+            bola.x = dx > 0 ? closestX + bola.raio : closestX - bola.raio;
+        } else {
+            bola.vy *= -0.8;
+            bola.y = dy > 0 ? closestY + bola.raio : closestY - bola.raio;
+        }
+        tocarSom(250, 'square', 0.08);
+    }
+}
+
 function resolverColisoes() {
-    // Colisão Jogador x CPU
     let dxP = cpu.x - jogador.x;
     let dyP = cpu.y - jogador.y;
     let distP = Math.hypot(dxP, dyP);
@@ -183,7 +302,6 @@ function resolverColisoes() {
         cpu.y += Math.sin(ang) * sobreposicao * 0.5;
     }
 
-    // Colisão Jogadores x Bola
     [jogador, cpu].forEach(p => {
         let dx = bola.x - p.x;
         let dy = bola.y - p.y;
@@ -201,6 +319,8 @@ function resolverColisoes() {
             tocarSom(150, 'triangle', 0.08);
         }
     });
+
+    resolverColisaoBarreira();
 }
 
 function moverJogador() {
@@ -210,13 +330,11 @@ function moverJogador() {
     if (teclas["a"] || teclas["arrowleft"]) inputX--;
     if (teclas["d"] || teclas["arrowright"]) inputX++;
 
-    // Normalização diagonal
     if (inputX !== 0 && inputY !== 0) {
         inputX *= 0.7071;
         inputY *= 0.7071;
     }
 
-    // Aceleração com física de inércia
     if ((inputX !== 0 || inputY !== 0) && jogador.energia > 2) {
         jogador.vx += inputX * CONFIG.aceleracao;
         jogador.vy += inputY * CONFIG.aceleracao;
@@ -225,7 +343,6 @@ function moverJogador() {
         jogador.energia = Math.min(jogador.maxEnergia, jogador.energia + 0.2);
     }
 
-    // Limitação de velocidade máxima e atrito
     let velAtual = Math.hypot(jogador.vx, jogador.vy);
     if (velAtual > jogador.velMax) {
         jogador.vx = (jogador.vx / velAtual) * jogador.velMax;
@@ -244,7 +361,7 @@ function moverJogador() {
 function moverCPU() {
     let alvoX = bola.x, alvoY = bola.y;
     if (bola.x < canvas.width / 2) {
-        alvoX = 780;
+        alvoX = 750;
         alvoY = Math.max(CONFIG.topGol, Math.min(CONFIG.bottomGol, bola.y));
     }
 
@@ -273,8 +390,8 @@ function moverCPU() {
         let dxB = bola.x - cpu.x;
         let dyB = bola.y - cpu.y;
         let distB = Math.hypot(dxB, dyB) || 1;
-        bola.vx = (dxB / distB) * 12;
-        bola.vy = (dyB / distB) * 12;
+        bola.vx = (dxB / distB) * dificuldadeAtual.cpuChuteForce;
+        bola.vy = (dyB / distB) * dificuldadeAtual.cpuChuteForce;
     }
 }
 
@@ -289,22 +406,16 @@ function moverBola() {
 
     let dentroDaBocaDoGol = bola.y > CONFIG.topGol && bola.y < CONFIG.bottomGol;
 
-    // --- NOVO SISTEMA DE DETECÇÃO DE GOL ---
-    // Gol da CPU (Lado Esquerdo): Bola precisa ultrapassar 100% a linha (x < 10 - raio)
     if (dentroDaBocaDoGol && (bola.x + bola.raio < 10)) {
-        animRedeEsquerda = 15;
         registrarGol("CPU");
         return;
     }
     
-    // Gol do Jogador (Lado Direito): Bola precisa ultrapassar 100% a linha (x > width - 10 + raio)
     if (dentroDaBocaDoGol && (bola.x - bola.raio > canvas.width - 10)) {
-        animRedeDireita = 15;
         registrarGol("Jogador");
         return;
     }
 
-    // Colisão com as Traves (Postes do Gol)
     const traves = [
         { x: 10, y: CONFIG.topGol }, { x: 10, y: CONFIG.bottomGol },
         { x: canvas.width - 10, y: CONFIG.topGol }, { x: canvas.width - 10, y: CONFIG.bottomGol }
@@ -320,7 +431,6 @@ function moverBola() {
         }
     });
 
-    // Rebate na rede interna se estiver dentro do espaço do gol
     if (bola.x < 10 || bola.x > canvas.width - 10) {
         if (bola.y - bola.raio <= CONFIG.topGol || bola.y + bola.raio >= CONFIG.bottomGol) {
             bola.vy *= -1;
@@ -329,7 +439,6 @@ function moverBola() {
             bola.vx *= -1;
         }
     } else {
-        // Colisão com as paredes laterais do campo fora do gol
         if (bola.y - bola.raio < 10 || bola.y + bola.raio > canvas.height - 10) {
             bola.vy *= -1;
             tocarSom(200, 'sine', 0.05);
@@ -365,6 +474,7 @@ function atualizarPlacar() {
 function resetarPosicoes() {
     jogador.x = 250; jogador.y = 300; jogador.vx = 0; jogador.vy = 0;
     cpu.x = 750; cpu.y = 300; cpu.vx = 0; cpu.vy = 0;
+    barreiraCPU.y = 300;
     bola.x = 500; bola.y = 300; bola.vx = 0; bola.vy = 0;
 }
 
@@ -376,30 +486,21 @@ function desenharCampo() {
     ctx.lineWidth = 4;
     ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
 
-    // Linha central
     ctx.beginPath();
     ctx.moveTo(canvas.width / 2, 10); ctx.lineTo(canvas.width / 2, canvas.height - 10);
     ctx.arc(canvas.width / 2, canvas.height / 2, 70, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Áreas
     ctx.strokeRect(10, 150, 120, 300);
     ctx.strokeRect(canvas.width - 130, 150, 120, 300);
 
-    // Redes dos Gols (Com animação ao marcar)
-    let offsetE = animRedeEsquerda > 0 ? (Math.random() * 4 - 2) : 0;
-    let offsetD = animRedeDireita > 0 ? (Math.random() * 4 - 2) : 0;
-    if (animRedeEsquerda > 0) animRedeEsquerda--;
-    if (animRedeDireita > 0) animRedeDireita--;
-
     ctx.fillStyle = "rgba(255,255,255,0.15)";
-    ctx.fillRect(-CONFIG.profundidadeGol + offsetE, CONFIG.topGol, CONFIG.profundidadeGol, CONFIG.larguraGol);
-    ctx.strokeRect(-CONFIG.profundidadeGol + offsetE, CONFIG.topGol, CONFIG.profundidadeGol, CONFIG.larguraGol);
+    ctx.fillRect(-CONFIG.profundidadeGol, CONFIG.topGol, CONFIG.profundidadeGol, CONFIG.larguraGol);
+    ctx.strokeRect(-CONFIG.profundidadeGol, CONFIG.topGol, CONFIG.profundidadeGol, CONFIG.larguraGol);
 
-    ctx.fillRect(canvas.width + offsetD, CONFIG.topGol, CONFIG.profundidadeGol, CONFIG.larguraGol);
-    ctx.strokeRect(canvas.width + offsetD, CONFIG.topGol, CONFIG.profundidadeGol, CONFIG.larguraGol);
+    ctx.fillRect(canvas.width, CONFIG.topGol, CONFIG.profundidadeGol, CONFIG.larguraGol);
+    ctx.strokeRect(canvas.width, CONFIG.topGol, CONFIG.profundidadeGol, CONFIG.larguraGol);
 
-    // Traves (Postes)
     ctx.fillStyle = "#fff";
     [ [10, CONFIG.topGol], [10, CONFIG.bottomGol], [canvas.width - 10, CONFIG.topGol], [canvas.width - 10, CONFIG.bottomGol] ].forEach(t => {
         ctx.beginPath();
@@ -409,6 +510,23 @@ function desenharCampo() {
 }
 
 function desenharEntidades() {
+    // Barreira da CPU
+    ctx.fillStyle = barreiraCPU.cor;
+    ctx.fillRect(
+        barreiraCPU.x - barreiraCPU.largura / 2,
+        barreiraCPU.y - barreiraCPU.altura / 2,
+        barreiraCPU.largura,
+        barreiraCPU.altura
+    );
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(
+        barreiraCPU.x - barreiraCPU.largura / 2,
+        barreiraCPU.y - barreiraCPU.altura / 2,
+        barreiraCPU.largura,
+        barreiraCPU.altura
+    );
+
     // Bola
     ctx.beginPath();
     ctx.arc(bola.x, bola.y, bola.raio, 0, Math.PI * 2);
@@ -439,7 +557,7 @@ function desenharOverlays() {
         ctx.fillText("FIM DE JOGO", canvas.width / 2, 250);
         ctx.fillText(res, canvas.width / 2, 320);
         ctx.font = "18px Arial"; ctx.fillStyle = "#aaa";
-        ctx.fillText("Pressione R para jogar novamente", canvas.width / 2, 380);
+        ctx.fillText("Pressione R para voltar ao menu", canvas.width / 2, 380);
     }
 }
 
@@ -449,6 +567,7 @@ function loop() {
     if (estadoJogo === "JOGANDO" || estadoJogo === "GOL") {
         moverJogador();
         moverCPU();
+        moverBarreiraCPU();
         moverBola();
         resolverColisoes();
     }
