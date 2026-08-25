@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Futebol JS - Seleção de Dificuldade</title>
+<title>Futebol JS - 2 Jogadores Locais</title>
 <style>
     * { box-sizing: border-box; user-select: none; }
     body {
@@ -29,25 +29,22 @@
         border: 1px solid #30363d;
         box-shadow: 0 4px 20px rgba(0,0,0,0.6);
     }
-    #placar { font-size: 26px; font-weight: 800; }
+    #placar { font-size: 24px; font-weight: 800; }
     #tempo { font-size: 20px; color: #ffca28; font-weight: bold; }
-    #dificuldade-hud { font-size: 14px; color: #8b949e; text-transform: uppercase; font-weight: bold; }
-    #bar-container {
-        width: 120px;
-        height: 14px;
+    #modo-hud { font-size: 13px; color: #8b949e; text-transform: uppercase; font-weight: bold; }
+    .bar-wrapper { display: flex; flex-direction: column; align-items: center; }
+    .bar-container {
+        width: 100px;
+        height: 12px;
         background: #333;
-        border-radius: 7px;
+        border-radius: 6px;
         overflow: hidden;
         border: 1px solid #555;
     }
-    #bar-energia {
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, #00c6ff, #0072ff);
-    }
-    #canvas-container {
-        position: relative;
-    }
+    .bar-energia { width: 100%; height: 100%; }
+    #bar-p1 { background: linear-gradient(90deg, #00c6ff, #0072ff); }
+    #bar-p2 { background: linear-gradient(90deg, #ff4e50, #f9d423); }
+    #canvas-container { position: relative; }
     canvas {
         background: #159447;
         border: 4px solid #fff;
@@ -57,11 +54,10 @@
         max-height: 70vh;
         display: block;
     }
-    /* Overlay HTML para Menu de Dificuldade */
-    #menu-dificuldade {
+    #menu-principal {
         position: absolute;
         top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(13, 17, 23, 0.9);
+        background: rgba(13, 17, 23, 0.95);
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -70,9 +66,9 @@
         border-radius: 8px;
         z-index: 10;
     }
-    #menu-dificuldade h2 { font-size: 32px; margin: 0 0 10px 0; color: #fff; }
-    .btn-dif {
-        width: 200px;
+    #menu-principal h2 { font-size: 32px; margin: 0 0 10px 0; color: #fff; }
+    .btn-opcao {
+        width: 240px;
         padding: 12px;
         font-size: 18px;
         font-weight: bold;
@@ -82,46 +78,49 @@
         cursor: pointer;
         transition: transform 0.1s, background 0.2s;
     }
-    .btn-dif:hover { transform: scale(1.05); }
-    .btn-facil { background: #2ea44f; }
-    .btn-medio { background: #d97706; }
-    .btn-dificil { background: #dc2626; }
-    p { color: #8b949e; margin-top: 10px; font-size: 14px; }
+    .btn-opcao:hover { transform: scale(1.05); }
+    .btn-cpu { background: #2ea44f; }
+    .btn-pvp { background: #0969da; }
+    p { color: #8b949e; margin-top: 10px; font-size: 13px; text-align: center; }
 </style>
 </head>
 <body>
 
 <div id="hud">
-    <div id="placar">Você 0 - 0 CPU</div>
+    <div class="bar-wrapper">
+        <small style="font-size:10px; color:#1683ff;">P1 ENERGIA</small>
+        <div class="bar-container"><div id="bar-p1" class="bar-energia"></div></div>
+    </div>
+    <div id="placar">P1 0 - 0 P2</div>
     <div id="tempo">02:00</div>
-    <div id="dificuldade-hud">MÉDIO</div>
-    <div>
-        <small style="display:block; font-size:10px; color:#aaa;">ENERGIA</small>
-        <div id="bar-container"><div id="bar-energia"></div></div>
+    <div id="modo-hud">VS CPU</div>
+    <div class="bar-wrapper">
+        <small style="font-size:10px; color:#ff3333;">P2 ENERGIA</small>
+        <div class="bar-container"><div id="bar-p2" class="bar-energia"></div></div>
     </div>
 </div>
 
 <div id="canvas-container">
     <canvas id="campo" width="1000" height="600"></canvas>
     
-    <div id="menu-dificuldade">
-        <h2>Escolha a Dificuldade</h2>
-        <button class="btn-dif btn-facil" onclick="selecionarDificuldade('FACIL')">1 - Fácil</button>
-        <button class="btn-dif btn-medio" onclick="selecionarDificuldade('MEDIO')">2 - Médio</button>
-        <button class="btn-dif btn-dificil" onclick="selecionarDificuldade('DIFICIL')">3 - Difícil</button>
+    <div id="menu-principal">
+        <h2>Selecione o Modo</h2>
+        <button class="btn-opcao btn-cpu" onclick="iniciarJogo('CPU')">1 Jogador (vs CPU)</button>
+        <button class="btn-opcao btn-pvp" onclick="iniciarJogo('PVP')">2 Jogadores (Local)</button>
     </div>
 </div>
 
-<p>🔵 Mover: WASD / Setas | ⚽ Chutar: Espaço | 🔄 Reiniciar Menu: R</p>
+<p>🔵 <b>P1:</b> WASD + Espaço | 🔴 <b>P2:</b> Setas + Enter/Shift | 🔄 <b>R:</b> Menu</p>
 
 <script>
 const canvas = document.getElementById("campo");
 const ctx = canvas.getContext("2d");
 const placarEl = document.getElementById("placar");
 const tempoEl = document.getElementById("tempo");
-const barEnergiaEl = document.getElementById("bar-energia");
-const difHudEl = document.getElementById("dificuldade-hud");
-const menuDifEl = document.getElementById("menu-dificuldade");
+const barP1El = document.getElementById("bar-p1");
+const barP2El = document.getElementById("bar-p2");
+const modoHudEl = document.getElementById("modo-hud");
+const menuEl = document.getElementById("menu-principal");
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 function tocarSom(freq, tipo, duracao) {
@@ -148,83 +147,66 @@ const CONFIG = {
     profundidadeGol: 40
 };
 
-// Configurações por nível de dificuldade
-const NIVEIS_DIFICULDADE = {
-    FACIL: { cpuVel: 2.8, cpuChuteForce: 10, barreiraVel: 2.0, barreiraAltura: 60, nome: "Fácil" },
-    MEDIO: { cpuVel: 3.8, cpuChuteForce: 12, barreiraVel: 3.2, barreiraAltura: 80, nome: "Médio" },
-    DIFICIL: { cpuVel: 4.8, cpuChuteForce: 15, barreiraVel: 4.5, barreiraAltura: 100, nome: "Difícil" }
-};
-
-let dificuldadeAtual = NIVEIS_DIFICULDADE.MEDIO;
 let estadoJogo = "MENU";
+let modoJogo = "CPU"; // "CPU" ou "PVP"
 let textoGolAnim = "";
 
-const jogador = { 
+const p1 = { 
     x: 250, y: 300, vx: 0, vy: 0, raio: 22, velMax: 5.5, cor: "#1683ff",
-    energia: 100, maxEnergia: 100 
+    energia: 100, maxEnergia: 100, nome: "P1" 
 };
-const cpu = { x: 750, y: 300, vx: 0, vy: 0, raio: 22, velMax: 3.8, cor: "#ff3333" };
-
-const barreiraCPU = {
-    x: 930,
-    y: 300,
-    largura: 16,
-    altura: 80,
-    vel: 3.2,
-    cor: "#888888"
+const p2 = { 
+    x: 750, y: 300, vx: 0, vy: 0, raio: 22, velMax: 5.5, cor: "#ff3333",
+    energia: 100, maxEnergia: 100, nome: "P2" 
 };
 
 const bola = { x: 500, y: 300, vx: 0, vy: 0, raio: 12 };
 
-let golsJogador = 0;
-let golsCPU = 0;
+let golsP1 = 0;
+let golsP2 = 0;
 let tempoRestante = 120;
 let timerInterval = null;
 const teclas = {};
 
 document.addEventListener("keydown", e => {
     teclas[e.key.toLowerCase()] = true;
-    if (e.code === "Space" && estadoJogo === "JOGANDO") {
-        chutar(jogador);
-        e.preventDefault();
+    teclas[e.code] = true;
+    
+    if (estadoJogo === "JOGANDO") {
+        if (e.code === "Space") { chutar(p1); e.preventDefault(); }
+        if (e.code === "Enter" || e.code === "ShiftRight") { chutar(p2); e.preventDefault(); }
     }
-    if (estadoJogo === "MENU") {
-        if (e.key === "1") selecionarDificuldade('FACIL');
-        if (e.key === "2") selecionarDificuldade('MEDIO');
-        if (e.key === "3") selecionarDificuldade('DIFICIL');
-    }
+    
     if (e.key.toLowerCase() === "r") voltarAoMenu();
 });
 
-document.addEventListener("keyup", e => teclas[e.key.toLowerCase()] = false);
+document.addEventListener("keyup", e => {
+    teclas[e.key.toLowerCase()] = false;
+    teclas[e.code] = false;
+});
 
-function selecionarDificuldade(nivelKey) {
-    dificuldadeAtual = NIVEIS_DIFICULDADE[nivelKey];
-    
-    // Aplicar atributos da CPU e Barreira
-    cpu.velMax = dificuldadeAtual.cpuVel;
-    barreiraCPU.vel = dificuldadeAtual.barreiraVel;
-    barreiraCPU.altura = dificuldadeAtual.barreiraAltura;
-    difHudEl.textContent = dificuldadeAtual.nome;
-    
-    menuDifEl.style.display = "none";
+function iniciarJogo(modo) {
+    modoJogo = modo;
+    modoHudEl.textContent = modo === "CPU" ? "VS CPU" : "2P LOCAL";
+    menuEl.style.display = "none";
     iniciarPartida();
 }
 
 function voltarAoMenu() {
     estadoJogo = "MENU";
-    menuDifEl.style.display = "flex";
+    menuEl.style.display = "flex";
     if (timerInterval) clearInterval(timerInterval);
     tempoEl.textContent = "02:00";
-    golsJogador = 0; golsCPU = 0;
+    golsP1 = 0; golsP2 = 0;
     atualizarPlacar();
     resetarPosicoes();
 }
 
 function iniciarPartida() {
-    golsJogador = 0; golsCPU = 0;
+    golsP1 = 0; golsP2 = 0;
     tempoRestante = 120;
-    jogador.energia = 100;
+    p1.energia = 100; p2.energia = 100;
+    p2.velMax = modoJogo === "CPU" ? 3.8 : 5.5;
     estadoJogo = "JOGANDO";
     atualizarPlacar();
     resetarPosicoes();
@@ -255,54 +237,20 @@ function chutar(p) {
     }
 }
 
-function moverBarreiraCPU() {
-    let dy = bola.y - barreiraCPU.y;
-    if (Math.abs(dy) > 5) {
-        barreiraCPU.y += Math.sign(dy) * barreiraCPU.vel;
-    }
-    let meioAltura = barreiraCPU.altura / 2;
-    barreiraCPU.y = Math.max(CONFIG.topGol + meioAltura, Math.min(CONFIG.bottomGol - meioAltura, barreiraCPU.y));
-}
-
-function resolverColisaoBarreira() {
-    let bx = barreiraCPU.x - barreiraCPU.largura / 2;
-    let by = barreiraCPU.y - barreiraCPU.altura / 2;
-    let bw = barreiraCPU.largura;
-    let bh = barreiraCPU.altura;
-
-    let closestX = Math.max(bx, Math.min(bola.x, bx + bw));
-    let closestY = Math.max(by, Math.min(bola.y, by + bh));
-
-    let dx = bola.x - closestX;
-    let dy = bola.y - closestY;
-    let dist = Math.hypot(dx, dy);
-
-    if (dist < bola.raio) {
-        if (Math.abs(dx) > Math.abs(dy)) {
-            bola.vx *= -0.8;
-            bola.x = dx > 0 ? closestX + bola.raio : closestX - bola.raio;
-        } else {
-            bola.vy *= -0.8;
-            bola.y = dy > 0 ? closestY + bola.raio : closestY - bola.raio;
-        }
-        tocarSom(250, 'square', 0.08);
-    }
-}
-
 function resolverColisoes() {
-    let dxP = cpu.x - jogador.x;
-    let dyP = cpu.y - jogador.y;
+    let dxP = p2.x - p1.x;
+    let dyP = p2.y - p1.y;
     let distP = Math.hypot(dxP, dyP);
-    if (distP < jogador.raio + cpu.raio) {
+    if (distP < p1.raio + p2.raio) {
         let ang = Math.atan2(dyP, dxP);
-        let sobreposicao = (jogador.raio + cpu.raio) - distP;
-        jogador.x -= Math.cos(ang) * sobreposicao * 0.5;
-        jogador.y -= Math.sin(ang) * sobreposicao * 0.5;
-        cpu.x += Math.cos(ang) * sobreposicao * 0.5;
-        cpu.y += Math.sin(ang) * sobreposicao * 0.5;
+        let sobreposicao = (p1.raio + p2.raio) - distP;
+        p1.x -= Math.cos(ang) * sobreposicao * 0.5;
+        p1.y -= Math.sin(ang) * sobreposicao * 0.5;
+        p2.x += Math.cos(ang) * sobreposicao * 0.5;
+        p2.y += Math.sin(ang) * sobreposicao * 0.5;
     }
 
-    [jogador, cpu].forEach(p => {
+    [p1, p2].forEach(p => {
         let dx = bola.x - p.x;
         let dy = bola.y - p.y;
         let dist = Math.hypot(dx, dy);
@@ -319,43 +267,62 @@ function resolverColisoes() {
             tocarSom(150, 'triangle', 0.08);
         }
     });
-
-    resolverColisaoBarreira();
 }
 
-function moverJogador() {
+function moverP1() {
     let inputX = 0, inputY = 0;
-    if (teclas["w"] || teclas["arrowup"]) inputY--;
-    if (teclas["s"] || teclas["arrowdown"]) inputY++;
-    if (teclas["a"] || teclas["arrowleft"]) inputX--;
-    if (teclas["d"] || teclas["arrowright"]) inputX++;
+    if (teclas["w"]) inputY--;
+    if (teclas["s"]) inputY++;
+    if (teclas["a"]) inputX--;
+    if (teclas["d"]) inputX++;
 
-    if (inputX !== 0 && inputY !== 0) {
-        inputX *= 0.7071;
-        inputY *= 0.7071;
-    }
+    if (inputX !== 0 && inputY !== 0) { inputX *= 0.7071; inputY *= 0.7071; }
 
-    if ((inputX !== 0 || inputY !== 0) && jogador.energia > 2) {
-        jogador.vx += inputX * CONFIG.aceleracao;
-        jogador.vy += inputY * CONFIG.aceleracao;
-        jogador.energia = Math.max(0, jogador.energia - 0.08);
+    if ((inputX !== 0 || inputY !== 0) && p1.energia > 2) {
+        p1.vx += inputX * CONFIG.aceleracao;
+        p1.vy += inputY * CONFIG.aceleracao;
+        p1.energia = Math.max(0, p1.energia - 0.08);
     } else {
-        jogador.energia = Math.min(jogador.maxEnergia, jogador.energia + 0.2);
+        p1.energia = Math.min(p1.maxEnergia, p1.energia + 0.2);
     }
 
-    let velAtual = Math.hypot(jogador.vx, jogador.vy);
-    if (velAtual > jogador.velMax) {
-        jogador.vx = (jogador.vx / velAtual) * jogador.velMax;
-        jogador.vy = (jogador.vy / velAtual) * jogador.velMax;
+    let velAtual = Math.hypot(p1.vx, p1.vy);
+    if (velAtual > p1.velMax) {
+        p1.vx = (p1.vx / velAtual) * p1.velMax;
+        p1.vy = (p1.vy / velAtual) * p1.velMax;
     }
-    jogador.vx *= CONFIG.atritoJogador;
-    jogador.vy *= CONFIG.atritoJogador;
+    p1.vx *= CONFIG.atritoJogador; p1.vy *= CONFIG.atritoJogador;
+    p1.x += p1.vx; p1.y += p1.vy;
+    limitarPosicao(p1);
+    barP1El.style.width = `${p1.energia}%`;
+}
 
-    jogador.x += jogador.vx;
-    jogador.y += jogador.vy;
-    limitarPosicao(jogador);
-    
-    barEnergiaEl.style.width = `${jogador.energia}%`;
+function moverP2Humano() {
+    let inputX = 0, inputY = 0;
+    if (teclas["ArrowUp"] || teclas["arrowup"]) inputY--;
+    if (teclas["ArrowDown"] || teclas["arrowdown"]) inputY++;
+    if (teclas["ArrowLeft"] || teclas["arrowleft"]) inputX--;
+    if (teclas["ArrowRight"] || teclas["arrowright"]) inputX++;
+
+    if (inputX !== 0 && inputY !== 0) { inputX *= 0.7071; inputY *= 0.7071; }
+
+    if ((inputX !== 0 || inputY !== 0) && p2.energia > 2) {
+        p2.vx += inputX * CONFIG.aceleracao;
+        p2.vy += inputY * CONFIG.aceleracao;
+        p2.energia = Math.max(0, p2.energia - 0.08);
+    } else {
+        p2.energia = Math.min(p2.maxEnergia, p2.energia + 0.2);
+    }
+
+    let velAtual = Math.hypot(p2.vx, p2.vy);
+    if (velAtual > p2.velMax) {
+        p2.vx = (p2.vx / velAtual) * p2.velMax;
+        p2.vy = (p2.vy / velAtual) * p2.velMax;
+    }
+    p2.vx *= CONFIG.atritoJogador; p2.vy *= CONFIG.atritoJogador;
+    p2.x += p2.vx; p2.y += p2.vy;
+    limitarPosicao(p2);
+    barP2El.style.width = `${p2.energia}%`;
 }
 
 function moverCPU() {
@@ -365,34 +332,30 @@ function moverCPU() {
         alvoY = Math.max(CONFIG.topGol, Math.min(CONFIG.bottomGol, bola.y));
     }
 
-    let dx = alvoX - cpu.x, dy = alvoY - cpu.y;
+    let dx = alvoX - p2.x, dy = alvoY - p2.y;
     let dist = Math.hypot(dx, dy);
 
     if (dist > 5) {
-        let dirX = (dx / dist);
-        let dirY = (dy / dist);
-        cpu.vx += dirX * (CONFIG.aceleracao * 0.7);
-        cpu.vy += dirY * (CONFIG.aceleracao * 0.7);
+        p2.vx += (dx / dist) * (CONFIG.aceleracao * 0.7);
+        p2.vy += (dy / dist) * (CONFIG.aceleracao * 0.7);
     }
 
-    let velAtual = Math.hypot(cpu.vx, cpu.vy);
-    if (velAtual > cpu.velMax) {
-        cpu.vx = (cpu.vx / velAtual) * cpu.velMax;
-        cpu.vy = (cpu.vy / velAtual) * cpu.velMax;
+    let velAtual = Math.hypot(p2.vx, p2.vy);
+    if (velAtual > p2.velMax) {
+        p2.vx = (p2.vx / velAtual) * p2.velMax;
+        p2.vy = (p2.vy / velAtual) * p2.velMax;
     }
-    cpu.vx *= CONFIG.atritoJogador;
-    cpu.vy *= CONFIG.atritoJogador;
+    p2.vx *= CONFIG.atritoJogador; p2.vy *= CONFIG.atritoJogador;
+    p2.x += p2.vx; p2.y += p2.vy;
+    limitarPosicao(p2);
 
-    cpu.x += cpu.vx; cpu.y += cpu.vy;
-    limitarPosicao(cpu);
-
-    if (distancia(cpu, bola) < cpu.raio + bola.raio + 8) {
-        let dxB = bola.x - cpu.x;
-        let dyB = bola.y - cpu.y;
+    if (distancia(p2, bola) < p2.raio + bola.raio + 8) {
+        let dxB = bola.x - p2.x, dyB = bola.y - p2.y;
         let distB = Math.hypot(dxB, dyB) || 1;
-        bola.vx = (dxB / distB) * dificuldadeAtual.cpuChuteForce;
-        bola.vy = (dyB / distB) * dificuldadeAtual.cpuChuteForce;
+        bola.vx = (dxB / distB) * 12;
+        bola.vy = (dyB / distB) * 12;
     }
+    barP2El.style.width = `100%`;
 }
 
 function limitarPosicao(p) {
@@ -407,12 +370,12 @@ function moverBola() {
     let dentroDaBocaDoGol = bola.y > CONFIG.topGol && bola.y < CONFIG.bottomGol;
 
     if (dentroDaBocaDoGol && (bola.x + bola.raio < 10)) {
-        registrarGol("CPU");
+        registrarGol("P2");
         return;
     }
     
     if (dentroDaBocaDoGol && (bola.x - bola.raio > canvas.width - 10)) {
-        registrarGol("Jogador");
+        registrarGol("P1");
         return;
     }
 
@@ -432,12 +395,8 @@ function moverBola() {
     });
 
     if (bola.x < 10 || bola.x > canvas.width - 10) {
-        if (bola.y - bola.raio <= CONFIG.topGol || bola.y + bola.raio >= CONFIG.bottomGol) {
-            bola.vy *= -1;
-        }
-        if (bola.x - bola.raio <= -CONFIG.profundidadeGol || bola.x + bola.raio >= canvas.width + CONFIG.profundidadeGol) {
-            bola.vx *= -1;
-        }
+        if (bola.y - bola.raio <= CONFIG.topGol || bola.y + bola.raio >= CONFIG.bottomGol) bola.vy *= -1;
+        if (bola.x - bola.raio <= -CONFIG.profundidadeGol || bola.x + bola.raio >= canvas.width + CONFIG.profundidadeGol) bola.vx *= -1;
     } else {
         if (bola.y - bola.raio < 10 || bola.y + bola.raio > canvas.height - 10) {
             bola.vy *= -1;
@@ -457,8 +416,8 @@ function registrarGol(autor) {
     estadoJogo = "GOL";
     tocarSom(600, 'sawtooth', 0.4);
 
-    if (autor === "Jogador") { golsJogador++; textoGolAnim = "GOLAAAAÇO! ⚽"; }
-    else { golsCPU++; textoGolAnim = "GOL DA CPU! 🤖"; }
+    if (autor === "P1") { golsP1++; textoGolAnim = "GOL DO P1! ⚽"; }
+    else { golsP2++; textoGolAnim = modoJogo === "CPU" ? "GOL DA CPU! 🤖" : "GOL DO P2! ⚽"; }
 
     atualizarPlacar();
     setTimeout(() => {
@@ -468,13 +427,13 @@ function registrarGol(autor) {
 }
 
 function atualizarPlacar() {
-    placarEl.textContent = `Você ${golsJogador} - ${golsCPU} CPU`;
+    let nomeP2 = modoJogo === "CPU" ? "CPU" : "P2";
+    placarEl.textContent = `P1 ${golsP1} - ${golsP2} ${nomeP2}`;
 }
 
 function resetarPosicoes() {
-    jogador.x = 250; jogador.y = 300; jogador.vx = 0; jogador.vy = 0;
-    cpu.x = 750; cpu.y = 300; cpu.vx = 0; cpu.vy = 0;
-    barreiraCPU.y = 300;
+    p1.x = 250; p1.y = 300; p1.vx = 0; p1.vy = 0;
+    p2.x = 750; p2.y = 300; p2.vx = 0; p2.vy = 0;
     bola.x = 500; bola.y = 300; bola.vx = 0; bola.vy = 0;
 }
 
@@ -510,23 +469,6 @@ function desenharCampo() {
 }
 
 function desenharEntidades() {
-    // Barreira da CPU
-    ctx.fillStyle = barreiraCPU.cor;
-    ctx.fillRect(
-        barreiraCPU.x - barreiraCPU.largura / 2,
-        barreiraCPU.y - barreiraCPU.altura / 2,
-        barreiraCPU.largura,
-        barreiraCPU.altura
-    );
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(
-        barreiraCPU.x - barreiraCPU.largura / 2,
-        barreiraCPU.y - barreiraCPU.altura / 2,
-        barreiraCPU.largura,
-        barreiraCPU.altura
-    );
-
     // Bola
     ctx.beginPath();
     ctx.arc(bola.x, bola.y, bola.raio, 0, Math.PI * 2);
@@ -534,7 +476,7 @@ function desenharEntidades() {
     ctx.strokeStyle = "#000"; ctx.lineWidth = 2; ctx.stroke();
 
     // Jogadores
-    [jogador, cpu].forEach(p => {
+    [p1, p2].forEach(p => {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.raio, 0, Math.PI * 2);
         ctx.fillStyle = p.cor; ctx.fill();
@@ -553,7 +495,10 @@ function desenharOverlays() {
         ctx.fillStyle = "rgba(0,0,0,0.8)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#fff"; ctx.font = "bold 48px Arial";
-        let res = golsJogador > golsCPU ? "Você Venceu! 🎉" : (golsCPU > golsJogador ? "CPU Venceu! 🤖" : "Empate!");
+        
+        let nomeP2 = modoJogo === "CPU" ? "CPU" : "P2";
+        let res = golsP1 > golsP2 ? "Jogador 1 Venceu! 🎉" : (golsP2 > golsP1 ? `${nomeP2} Venceu! 🎉` : "Empate!");
+        
         ctx.fillText("FIM DE JOGO", canvas.width / 2, 250);
         ctx.fillText(res, canvas.width / 2, 320);
         ctx.font = "18px Arial"; ctx.fillStyle = "#aaa";
@@ -565,9 +510,9 @@ function loop() {
     desenharCampo();
 
     if (estadoJogo === "JOGANDO" || estadoJogo === "GOL") {
-        moverJogador();
-        moverCPU();
-        moverBarreiraCPU();
+        moverP1();
+        if (modoJogo === "PVP") moverP2Humano();
+        else moverCPU();
         moverBola();
         resolverColisoes();
     }
