@@ -2,336 +2,330 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Jogo de Futebol</title>
-
+<title>Jogo de Futebol JS</title>
 <style>
-    * {
-        box-sizing: border-box;
-    }
-
+    * { box-sizing: border-box; }
     body {
         margin: 0;
         background: #111;
         color: white;
-        font-family: Arial, sans-serif;
-        text-align: center;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
     }
-
-    h1 {
-        margin: 15px 0 5px;
+    #hud {
+        display: flex;
+        gap: 30px;
+        align-items: center;
+        margin-bottom: 10px;
+        background: #222;
+        padding: 10px 25px;
+        border-radius: 8px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.5);
     }
-
-    #placar {
-        font-size: 24px;
-        margin: 10px;
-    }
-
+    #placar { font-size: 28px; font-weight: bold; }
+    #tempo { font-size: 20px; color: #ffca28; }
     canvas {
         background: #159447;
-        border: 5px solid white;
+        border: 4px solid #fff;
+        border-radius: 4px;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.6);
         max-width: 95vw;
-        height: auto;
     }
-
-    p {
-        color: #ddd;
-    }
+    p { color: #aaa; margin-top: 10px; }
 </style>
 </head>
-
 <body>
 
-<h1>⚽ Futebol</h1>
-<div id="placar">Você 0 x 0 CPU</div>
+<div id="hud">
+    <div id="placar">Você 0 - 0 CPU</div>
+    <div id="tempo">02:00</div>
+</div>
 
 <canvas id="campo" width="1000" height="600"></canvas>
 
-<p>
-    🔵 Mover: WASD / Setas &nbsp; | &nbsp;
-    ⚽ Chutar: Espaço
-</p>
+<p>🔵 Mover: WASD / Setas | ⚽ Chutar: Espaço</p>
 
 <script>
 const canvas = document.getElementById("campo");
 const ctx = canvas.getContext("2d");
-const placar = document.getElementById("placar");
+const placarEl = document.getElementById("placar");
+const tempoEl = document.getElementById("tempo");
 
-const jogador = {
-    x: 250,
-    y: 300,
-    raio: 22,
-    velocidade: 5,
-    cor: "#1683ff"
+const CONFIG = {
+    atrito: 0.98,
+    larguraGol: 160,
+    topGol: 220,
+    bottomGol: 380
 };
 
-const cpu = {
-    x: 750,
-    y: 300,
-    raio: 22,
-    velocidade: 2.5,
-    cor: "#ff3333"
-};
-
-const bola = {
-    x: 500,
-    y: 300,
-    raio: 12,
-    vx: 0,
-    vy: 0
-};
+const jogador = { x: 250, y: 300, vx: 0, vy: 0, raio: 22, vel: 5.5, cor: "#1683ff", nome: "Você" };
+const cpu = { x: 750, y: 300, vx: 0, vy: 0, raio: 22, vel: 3.8, cor: "#ff3333", nome: "CPU" };
+const bola = { x: 500, y: 300, vx: 0, vy: 0, raio: 12, massa: 0.5 };
 
 let golsJogador = 0;
 let golsCPU = 0;
-
+let tempoRestante = 120;
+let jogoAtivo = true;
+let congelado = false;
 const teclas = {};
 
 document.addEventListener("keydown", e => {
     teclas[e.key.toLowerCase()] = true;
-
-    if (e.code === "Space") {
-        chutar();
+    if (e.code === "Space" && jogoAtivo && !congelado) {
+        chutar(jogador);
         e.preventDefault();
     }
 });
 
-document.addEventListener("keyup", e => {
-    teclas[e.key.toLowerCase()] = false;
-});
+document.addEventListener("keyup", e => teclas[e.key.toLowerCase()] = false);
+
+// Loop do Cronômetro
+const timerInterval = setInterval(() => {
+    if (!congelado && jogoAtivo) {
+        tempoRestante--;
+        const min = String(Math.floor(tempoRestante / 60)).padStart(2, '0');
+        const seg = String(tempoRestante % 60).padStart(2, '0');
+        tempoEl.textContent = `${min}:${seg}`;
+
+        if (tempoRestante <= 0) {
+            jogoAtivo = false;
+            clearInterval(timerInterval);
+        }
+    }
+}, 1000);
 
 function distancia(a, b) {
     return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function chutar() {
-    const d = distancia(jogador, bola);
+function chutar(p) {
+    if (distancia(p, bola) < p.raio + bola.raio + 15) {
+        let dx = bola.x - p.x;
+        let dy = bola.y - p.y;
+        let dist = Math.hypot(dx, dy) || 1;
+        
+        bola.vx = (dx / dist) * 14;
+        bola.vy = (dy / dist) * 14;
+    }
+}
 
-    if (d < 55) {
-        let dx = bola.x - jogador.x;
-        let dy = bola.y - jogador.y;
+function resolverColisaoEntidades(a, b) {
+    let dx = b.x - a.x;
+    let dy = b.y - a.y;
+    let dist = Math.hypot(dx, dy);
+    let minDist = a.raio + b.raio;
 
-        const tamanho = Math.hypot(dx, dy) || 1;
+    if (dist < minDist) {
+        let angulo = Math.atan2(dy, dx);
+        let sobreposicao = minDist - dist;
 
-        bola.vx = (dx / tamanho) * 11;
-        bola.vy = (dy / tamanho) * 11;
+        // Afastar entidades
+        let taxaA = a === bola ? 1 : 0.5;
+        let taxaB = b === bola ? 1 : 0.5;
+
+        a.x -= Math.cos(angulo) * sobreposicao * taxaA;
+        a.y -= Math.sin(angulo) * sobreposicao * taxaA;
+        b.x += Math.cos(angulo) * sobreposicao * taxaB;
+        b.y += Math.sin(angulo) * sobreposicao * taxaB;
+
+        // Transferência de impulso simples para a bola
+        if (b === bola) {
+            b.vx = Math.cos(angulo) * (Math.hypot(a.vx, a.vy) + 2);
+            b.vy = Math.sin(angulo) * (Math.hypot(a.vx, a.vy) + 2);
+        }
     }
 }
 
 function moverJogador() {
-    let dx = 0;
-    let dy = 0;
-
+    let dx = 0, dy = 0;
     if (teclas["w"] || teclas["arrowup"]) dy--;
     if (teclas["s"] || teclas["arrowdown"]) dy++;
     if (teclas["a"] || teclas["arrowleft"]) dx--;
     if (teclas["d"] || teclas["arrowright"]) dx++;
 
     if (dx !== 0 || dy !== 0) {
-        const tamanho = Math.hypot(dx, dy);
-
-        dx /= tamanho;
-        dy /= tamanho;
-
-        jogador.x += dx * jogador.velocidade;
-        jogador.y += dy * jogador.velocidade;
+        let len = Math.hypot(dx, dy);
+        jogador.vx = (dx / len) * jogador.vel;
+        jogador.vy = (dy / len) * jogador.vel;
+    } else {
+        jogador.vx = 0;
+        jogador.vy = 0;
     }
 
-    limitarJogador(jogador);
-}
-
-function limitarJogador(p) {
-    p.x = Math.max(25, Math.min(canvas.width - 25, p.x));
-    p.y = Math.max(25, Math.min(canvas.height - 25, p.y));
+    jogador.x += jogador.vx;
+    jogador.y += jogador.vy;
+    limitarPosicao(jogador);
 }
 
 function moverCPU() {
-    let dx = bola.x - cpu.x;
-    let dy = bola.y - cpu.y;
+    let alvoX = bola.x;
+    let alvoY = bola.y;
 
-    const tamanho = Math.hypot(dx, dy);
-
-    if (tamanho > 5) {
-        cpu.x += (dx / tamanho) * cpu.velocidade;
-        cpu.y += (dy / tamanho) * cpu.velocidade;
+    // Se a bola estiver do lado do jogador, a CPU recua para defender
+    if (bola.x < canvas.width / 2) {
+        alvoX = 750;
+        alvoY = Math.max(CONFIG.topGol, Math.min(CONFIG.bottomGol, bola.y));
     }
 
-    limitarJogador(cpu);
+    let dx = alvoX - cpu.x;
+    let dy = alvoY - cpu.y;
+    let dist = Math.hypot(dx, dy);
 
-    // CPU chuta quando chega perto da bola
-    if (distancia(cpu, bola) < 45) {
-        let direcaoX = -1;
-        let direcaoY = (300 - bola.y) / 300;
-
-        const tamanhoDir = Math.hypot(direcaoX, direcaoY);
-
-        bola.vx = (direcaoX / tamanhoDir) * 8;
-        bola.vy = (direcaoY / tamanhoDir) * 8;
+    if (dist > 5) {
+        cpu.vx = (dx / dist) * cpu.vel;
+        cpu.vy = (dy / dist) * cpu.vel;
+        cpu.x += cpu.vx;
+        cpu.y += cpu.vy;
     }
+
+    limitarPosicao(cpu);
+
+    // CPU Chuta
+    if (distancia(cpu, bola) < cpu.raio + bola.raio + 10) {
+        chutar(cpu);
+    }
+}
+
+function limitarPosicao(p) {
+    p.x = Math.max(p.raio, Math.min(canvas.width - p.raio, p.x));
+    p.y = Math.max(p.raio, Math.min(canvas.height - p.raio, p.y));
 }
 
 function moverBola() {
     bola.x += bola.vx;
     bola.y += bola.vy;
 
-    // Atrito
-    bola.vx *= 0.985;
-    bola.vy *= 0.985;
+    bola.vx *= CONFIG.atrito;
+    bola.vy *= CONFIG.atrito;
 
-    // Rebater nas laterais
-    if (bola.y < bola.raio || bola.y > canvas.height - bola.raio) {
+    // Colisão com as traves superiores e inferiores do campo
+    if (bola.y - bola.raio < 10 || bola.y + bola.raio > canvas.height - 10) {
         bola.vy *= -1;
+        bola.y = bola.y - bola.raio < 10 ? 10 + bola.raio : canvas.height - 10 - bola.raio;
     }
 
-    // Gol do jogador
-    if (bola.x < -10 && bola.y > 220 && bola.y < 380) {
-        golsCPU++;
-        reiniciar();
-        atualizarPlacar();
-        return;
-    }
-
-    // Gol da CPU
-    if (bola.x > canvas.width + 10 && bola.y > 220 && bola.y < 380) {
-        golsJogador++;
-        reiniciar();
-        atualizarPlacar();
-        return;
-    }
-
-    // Limites sem gol
-    if (bola.x < bola.raio) {
-        bola.x = bola.raio;
-        bola.vx *= -1;
-    }
-
-    if (bola.x > canvas.width - bola.raio) {
-        bola.x = canvas.width - bola.raio;
-        bola.vx *= -1;
+    // Checar Gols
+    if (bola.y > CONFIG.topGol && bola.y < CONFIG.bottomGol) {
+        if (bola.x < 10) registrarGol("CPU");
+        if (bola.x > canvas.width - 10) registrarGol("Jogador");
+    } else {
+        // Rebater nas paredes laterais (fora da área do gol)
+        if (bola.x - bola.raio < 10) {
+            bola.vx *= -1;
+            bola.x = 10 + bola.raio;
+        }
+        if (bola.x + bola.raio > canvas.width - 10) {
+            bola.vx *= -1;
+            bola.x = canvas.width - 10 - bola.raio;
+        }
     }
 }
 
-function colisao(p) {
-    const dx = bola.x - p.x;
-    const dy = bola.y - p.y;
+function registrarGol(autor) {
+    if (congelado) return;
+    congelado = true;
 
-    const d = Math.hypot(dx, dy);
+    if (autor === "Jogador") golsJogador++;
+    else golsCPU++;
 
-    if (d < p.raio + bola.raio) {
-        const angulo = Math.atan2(dy, dx);
+    placarEl.textContent = `Você ${golsJogador} - ${golsCPU} CPU`;
 
-        bola.x = p.x + Math.cos(angulo) * (p.raio + bola.raio);
-        bola.y = p.y + Math.sin(angulo) * (p.raio + bola.raio);
-
-        bola.vx = Math.cos(angulo) * 3;
-        bola.vy = Math.sin(angulo) * 3;
-    }
+    setTimeout(() => {
+        resetarPosicoes();
+        congelado = false;
+    }, 1500);
 }
 
-function reiniciar() {
-    jogador.x = 250;
-    jogador.y = 300;
-
-    cpu.x = 750;
-    cpu.y = 300;
-
-    bola.x = 500;
-    bola.y = 300;
-
-    bola.vx = 0;
-    bola.vy = 0;
-}
-
-function atualizarPlacar() {
-    placar.textContent =
-        `Você ${golsJogador} x ${golsCPU} CPU`;
+function resetarPosicoes() {
+    jogador.x = 250; jogador.y = 300;
+    cpu.x = 750; cpu.y = 300;
+    bola.x = 500; bola.y = 300;
+    bola.vx = 0; bola.vy = 0;
 }
 
 function desenharCampo() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Campo
     ctx.fillStyle = "#159447";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Linhas
-    ctx.strokeStyle = "white";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
     ctx.lineWidth = 4;
 
+    // Linhas externas
     ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
 
-    // Linha central
+    // Linha de meio campo e círculo central
     ctx.beginPath();
     ctx.moveTo(canvas.width / 2, 10);
     ctx.lineTo(canvas.width / 2, canvas.height - 10);
+    ctx.arc(canvas.width / 2, canvas.height / 2, 70, 0, Math.PI * 2);
     ctx.stroke();
-
-    // Círculo central
-    ctx.beginPath();
-    ctx.arc(500, 300, 80, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Ponto central
-    ctx.beginPath();
-    ctx.arc(500, 300, 5, 0, Math.PI * 2);
-    ctx.fillStyle = "white";
-    ctx.fill();
 
     // Áreas
-    ctx.strokeRect(10, 180, 130, 240);
-    ctx.strokeRect(860, 180, 130, 240);
+    ctx.strokeRect(10, 150, 120, 300);
+    ctx.strokeRect(canvas.width - 130, 150, 120, 300);
 
     // Gols
-    ctx.strokeRect(-5, 220, 25, 160);
-    ctx.strokeRect(980, 220, 25, 160);
+    ctx.fillStyle = "rgba(255,255,255,0.2)";
+    ctx.fillRect(0, CONFIG.topGol, 10, CONFIG.larguraGol);
+    ctx.fillRect(canvas.width - 10, CONFIG.topGol, 10, CONFIG.larguraGol);
 }
 
-function desenharJogador(p) {
+function desenharEntidade(e) {
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.raio, 0, Math.PI * 2);
-    ctx.fillStyle = p.cor;
+    ctx.arc(e.x, e.y, e.raio, 0, Math.PI * 2);
+    ctx.fillStyle = e.cor;
     ctx.fill();
-
-    ctx.strokeStyle = "white";
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
     ctx.stroke();
+    ctx.closePath();
 }
 
-function desenharBola() {
-    ctx.beginPath();
-    ctx.arc(
-        bola.x,
-        bola.y,
-        bola.raio,
-        0,
-        Math.PI * 2
-    );
+function desenharFimDeJogo() {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    ctx.fillStyle = "white";
-    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = "48px Arial";
+    ctx.textAlign = "center";
 
-    ctx.strokeStyle = "black";
-    ctx.stroke();
+    let texto = "Empate!";
+    if (golsJogador > golsCPU) texto = "Você Venceu! 🎉";
+    if (golsCPU > golsJogador) texto = "CPU Venceu! 🤖";
+
+    ctx.fillText("FIM DE JOGO", canvas.width / 2, 260);
+    ctx.fillText(texto, canvas.width / 2, 340);
 }
 
-function jogo() {
-    moverJogador();
-    moverCPU();
-
-    colisao(jogador);
-    colisao(cpu);
-
-    moverBola();
-
+function loop() {
     desenharCampo();
-    desenharJogador(jogador);
-    desenharJogador(cpu);
-    desenharBola();
 
-    requestAnimationFrame(jogo);
+    if (jogoAtivo) {
+        if (!congelado) {
+            moverJogador();
+            moverCPU();
+            moverBola();
+
+            resolverColisaoEntidades(jogador, bola);
+            resolverColisaoEntidades(cpu, bola);
+            resolverColisaoEntidades(jogador, cpu);
+        }
+
+        desenharEntidade(jogador);
+        desenharEntidade(cpu);
+        desenharEntidade(bola);
+    } else {
+        desenharFimDeJogo();
+    }
+
+    requestAnimationFrame(loop);
 }
 
-atualizarPlacar();
-jogo();
+loop();
 </script>
-
 </body>
 </html>
