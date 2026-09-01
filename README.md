@@ -81,6 +81,7 @@
     .btn-opcao:hover { transform: scale(1.05); }
     .btn-cpu { background: #2ea44f; }
     .btn-pvp { background: #0969da; }
+    .btn-penaltis { background: #d97706; }
     p { color: #8b949e; margin-top: 10px; font-size: 13px; text-align: center; }
 </style>
 </head>
@@ -107,10 +108,11 @@
         <h2>Selecione o Modo</h2>
         <button class="btn-opcao btn-cpu" onclick="iniciarJogo('CPU')">1 Jogador (vs CPU)</button>
         <button class="btn-opcao btn-pvp" onclick="iniciarJogo('PVP')">2 Jogadores (Local)</button>
+        <button class="btn-opcao btn-penaltis" onclick="iniciarJogo('PENALTIS')">Disputa de Pênaltis</button>
     </div>
 </div>
 
-<p>🔵 <b>P1:</b> WASD + Espaço | 🔴 <b>P2:</b> Setas + Enter/Shift | 🔄 <b>R:</b> Menu</p>
+<p>🔵 <b>P1:</b> WASD + Espaço (Pênaltis: 1-Esq, 2-Meio, 3-Dir) | 🔴 <b>P2:</b> Setas + Enter/Shift | 🔄 <b>R:</b> Menu</p>
 
 <script>
 const canvas = document.getElementById("campo");
@@ -148,8 +150,61 @@ const CONFIG = {
 };
 
 let estadoJogo = "MENU";
-let modoJogo = "CPU"; // "CPU" ou "PVP"
+let modoJogo = "CPU";
 let textoGolAnim = "";
+
+// Sistema de Partículas
+let particulasGol = [];
+
+function CriarParticula(x, y, cor) {
+    return {
+        x: x, y: y,
+        vx: (Math.random() - 0.5) * 8,
+        vy: (Math.random() - 0.5) * 8,
+        raio: Math.random() * 4 + 2,
+        cor: cor,
+        vida: 1.0,
+        decaiVida: Math.random() * 0.02 + 0.01
+    };
+}
+
+function DispararExplosaoGol(autor) {
+    let x, cor;
+    let yVal = bola.y;
+
+    if (autor === "P1") {
+        x = canvas.width - 10;
+        cor = p1.cor;
+    } else {
+        x = 10;
+        cor = p2.cor;
+    }
+
+    for (let i = 0; i < 50; i++) {
+        particulasGol.push(CriarParticula(x, yVal, cor));
+    }
+}
+
+function atualizarParticulas() {
+    for (let i = particulasGol.length - 1; i >= 0; i--) {
+        let p = particulasGol[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vida -= p.decaiVida;
+        if (p.vida <= 0) particulasGol.splice(i, 1);
+    }
+}
+
+function desenharParticulas() {
+    particulasGol.forEach(p => {
+        ctx.globalAlpha = p.vida;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.raio, 0, Math.PI * 2);
+        ctx.fillStyle = p.cor;
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+    });
+}
 
 const p1 = { 
     x: 250, y: 300, vx: 0, vy: 0, raio: 22, velMax: 5.5, cor: "#1683ff",
@@ -168,13 +223,24 @@ let tempoRestante = 120;
 let timerInterval = null;
 const teclas = {};
 
+// Variáveis da Disputa de Pênaltis
+let penaltisRodada = 1;
+let penaltisTurno = "P1_CHUTA"; // "P1_CHUTA" ou "CPU_CHUTA"
+let mensagemPenalti = "";
+
 document.addEventListener("keydown", e => {
     teclas[e.key.toLowerCase()] = true;
     teclas[e.code] = true;
     
     if (estadoJogo === "JOGANDO") {
-        if (e.code === "Space") { chutar(p1); e.preventDefault(); }
-        if (e.code === "Enter" || e.code === "ShiftRight") { chutar(p2); e.preventDefault(); }
+        if (modoJogo !== "PENALTIS") {
+            if (e.code === "Space") { chutar(p1); e.preventDefault(); }
+            if (e.code === "Enter" || e.code === "ShiftRight") { chutar(p2); e.preventDefault(); }
+        } else {
+            if (["1", "2", "3"].includes(e.key)) {
+                processarPenalti(parseInt(e.key));
+            }
+        }
     }
     
     if (e.key.toLowerCase() === "r") voltarAoMenu();
@@ -187,9 +253,14 @@ document.addEventListener("keyup", e => {
 
 function iniciarJogo(modo) {
     modoJogo = modo;
-    modoHudEl.textContent = modo === "CPU" ? "VS CPU" : "2P LOCAL";
+    modoHudEl.textContent = modo === "CPU" ? "VS CPU" : (modo === "PVP" ? "2P LOCAL" : "PÊNALTIS");
     menuEl.style.display = "none";
-    iniciarPartida();
+    
+    if (modo === "PENALTIS") {
+        iniciarPenaltis();
+    } else {
+        iniciarPartida();
+    }
 }
 
 function voltarAoMenu() {
@@ -198,6 +269,7 @@ function voltarAoMenu() {
     if (timerInterval) clearInterval(timerInterval);
     tempoEl.textContent = "02:00";
     golsP1 = 0; golsP2 = 0;
+    particulasGol = [];
     atualizarPlacar();
     resetarPosicoes();
 }
@@ -221,6 +293,86 @@ function iniciarPartida() {
             if (tempoRestante <= 0) estadoJogo = "FIM";
         }
     }, 1000);
+}
+
+function iniciarPenaltis() {
+    golsP1 = 0; golsP2 = 0;
+    penaltisRodada = 1;
+    penaltisTurno = "P1_CHUTA";
+    estadoJogo = "JOGANDO";
+    tempoEl.textContent = "R1 / 5";
+    mensagemPenalti = "P1: Escolha a direção do chute (1-Esq, 2-Meio, 3-Dir)";
+    atualizarPlacar();
+    configurarPosicaoPenalti();
+}
+
+function configurarPosicaoPenalti() {
+    if (penaltisTurno === "P1_CHUTA") {
+        p1.x = 750; p1.y = 300;
+        p2.x = 960; p2.y = 300; // Goleiro na linha
+        bola.x = 800; bola.y = 300;
+    } else {
+        p2.x = 250; p2.y = 300;
+        p1.x = 40; p1.y = 300; // Goleiro na linha
+        bola.x = 200; bola.y = 300;
+    }
+    bola.vx = 0; bola.vy = 0;
+}
+
+function processarPenalti(escolhaJogador) {
+    const direcoesY = { 1: 230, 2: 300, 3: 370 }; // Esq, Meio, Dir
+    const escolhaCPU = Math.floor(Math.random() * 3) + 1;
+
+    if (penaltisTurno === "P1_CHUTA") {
+        let alvoY = direcoesY[escolhaJogador];
+        let defesaY = direcoesY[escolhaCPU];
+
+        p2.y = defesaY;
+        bola.vx = 14;
+        bola.vy = (alvoY - bola.y) * 0.2;
+
+        if (escolhaJogador !== escolhaCPU) {
+            registrarGol("P1");
+        } else {
+            tocarSom(150, 'triangle', 0.2);
+            mensagemPenalti = "DEFENDEU O GOLEIRO!";
+            avancarTurnoPenalti();
+        }
+    } else {
+        let alvoY = direcoesY[escolhaCPU];
+        let defesaY = direcoesY[escolhaJogador];
+
+        p1.y = defesaY;
+        bola.vx = -14;
+        bola.vy = (alvoY - bola.y) * 0.2;
+
+        if (escolhaJogador !== escolhaCPU) {
+            registrarGol("P2");
+        } else {
+            tocarSom(150, 'triangle', 0.2);
+            mensagemPenalti = "DEFESA! Você salvou!";
+            avancarTurnoPenalti();
+        }
+    }
+}
+
+function avancarTurnoPenalti() {
+    setTimeout(() => {
+        if (penaltisTurno === "P1_CHUTA") {
+            penaltisTurno = "CPU_CHUTA";
+            mensagemPenalti = "Sua vez de defender! Escolha para onde pular (1, 2 ou 3)";
+        } else {
+            penaltisTurno = "P1_CHUTA";
+            penaltisRodada++;
+            if (penaltisRodada > 5) {
+                estadoJogo = "FIM";
+                return;
+            }
+            mensagemPenalti = "P1: Escolha a direção do chute (1, 2 ou 3)";
+        }
+        tempoEl.textContent = `R${penaltisRodada} / 5`;
+        configurarPosicaoPenalti();
+    }, 1500);
 }
 
 function distancia(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
@@ -415,15 +567,25 @@ function registrarGol(autor) {
     if (estadoJogo !== "JOGANDO") return;
     estadoJogo = "GOL";
     tocarSom(600, 'sawtooth', 0.4);
+    DispararExplosaoGol(autor);
 
     if (autor === "P1") { golsP1++; textoGolAnim = "GOL DO P1! ⚽"; }
     else { golsP2++; textoGolAnim = modoJogo === "CPU" ? "GOL DA CPU! 🤖" : "GOL DO P2! ⚽"; }
 
     atualizarPlacar();
-    setTimeout(() => {
-        resetarPosicoes();
-        if (tempoRestante > 0) estadoJogo = "JOGANDO";
-    }, 2000);
+    
+    if (modoJogo === "PENALTIS") {
+        avancarTurnoPenalti();
+        setTimeout(() => {
+            if (tempoRestante > 0 && estadoJogo !== "FIM") estadoJogo = "JOGANDO";
+        }, 1500);
+    } else {
+        setTimeout(() => {
+            resetarPosicoes();
+            particulasGol = [];
+            if (tempoRestante > 0) estadoJogo = "JOGANDO";
+        }, 2000);
+    }
 }
 
 function atualizarPlacar() {
@@ -469,13 +631,11 @@ function desenharCampo() {
 }
 
 function desenharEntidades() {
-    // Bola
     ctx.beginPath();
     ctx.arc(bola.x, bola.y, bola.raio, 0, Math.PI * 2);
     ctx.fillStyle = "#fff"; ctx.fill();
     ctx.strokeStyle = "#000"; ctx.lineWidth = 2; ctx.stroke();
 
-    // Jogadores
     [p1, p2].forEach(p => {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.raio, 0, Math.PI * 2);
@@ -486,6 +646,12 @@ function desenharEntidades() {
 
 function desenharOverlays() {
     ctx.textAlign = "center";
+    
+    if (modoJogo === "PENALTIS" && estadoJogo === "JOGANDO") {
+        ctx.fillStyle = "#ffca28"; ctx.font = "bold 20px Arial";
+        ctx.fillText(mensagemPenalti, canvas.width / 2, 50);
+    }
+
     if (estadoJogo === "GOL") {
         ctx.fillStyle = "rgba(0,0,0,0.4)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -508,13 +674,19 @@ function desenharOverlays() {
 
 function loop() {
     desenharCampo();
+    atualizarParticulas();
+    desenharParticulas();
 
     if (estadoJogo === "JOGANDO" || estadoJogo === "GOL") {
-        moverP1();
-        if (modoJogo === "PVP") moverP2Humano();
-        else moverCPU();
-        moverBola();
-        resolverColisoes();
+        if (modoJogo !== "PENALTIS") {
+            moverP1();
+            if (modoJogo === "PVP") moverP2Humano();
+            else moverCPU();
+            moverBola();
+            resolverColisoes();
+        } else if (estadoJogo === "GOL") {
+            moverBola();
+        }
     }
 
     desenharEntidades();
