@@ -1,67 +1,225 @@
-from getpass import getpass
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Brasileirão - Mini Futebol</title>
 
+<style>
+body{
+    margin:0;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    background:#1a1a1a;
+    font-family:Arial, Helvetica, sans-serif;
+}
 
-def jogo_penaltis_multiplayer():
-    print("=" * 40)
-    print("  DISPUTA DE PÊNALTIS - 2 JOGADORES  ")
-    print("=" * 40)
+canvas{
+    background:#2e8b57;
+    border:5px solid #fff;
+}
+</style>
+</head>
+<body>
 
-    p1_nome = input("Nome do Jogador 1 (Batedor): ").strip() or "Jogador 1"
-    p2_nome = input("Nome do Jogador 2 (Goleiro): ").strip() or "Jogador 2"
+<canvas id="game" width="900" height="500"></canvas>
 
-    opcoes = {"1": "esquerda", "2": "centro", "3": "direita"}
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-    placar_p1 = 0
-    placar_p2 = 0
-    rodadas = 5
+// Escolha dos times
+const timeCasa = "Flamengo";
+const timeVisitante = "Palmeiras";
 
-    print("\nInstruções: Digite 1 (Esquerda), 2 (Centro) ou 3 (Direita).")
-    print("A digitação ficará OCULTA para o outro jogador não ver!\n")
+// Cores dos uniformes
+const casaCor = "#d40000";
+const visitanteCor = "#0b7d35";
 
-    for rodada in range(1, rodadas + 1):
-        print(f"\n--- Rodada {rodada} de {rodadas} ---")
+const jogador = {
+    x:120,
+    y:250,
+    r:22,
+    color:casaCor,
+    speed:4
+};
 
-        # Vez do Batedor (Jogador 1)
-        chute = ""
-        while chute not in opcoes:
-            chute = getpass(
-                f"{p1_nome} (Batedor), escolha onde chutar [1-Esquerda, 2-Centro, 3-Direita]: "
-            )
+const cpu = {
+    x:780,
+    y:250,
+    r:22,
+    color:visitanteCor,
+    speed:2.4
+};
 
-        # Vez do Goleiro (Jogador 2)
-        defesa = ""
-        while defesa not in opcoes:
-            defesa = getpass(
-                f"{p2_nome} (Goleiro), escolha onde pular  [1-Esquerda, 2-Centro, 3-Direita]: "
-            )
+const bola = {
+    x:450,
+    y:250,
+    r:10,
+    vx:0,
+    vy:0
+};
 
-        pos_chute = opcoes[chute]
-        pos_defesa = opcoes[defesa]
+let placarCasa = 0;
+let placarVisitante = 0;
 
-        print(f"\n⚽ {p1_nome} chutou na: {pos_chute.upper()}")
-        print(f"🧤 {p2_nome} pulou na: {pos_defesa.upper()}")
+const teclas = {};
 
-        if pos_chute == pos_defesa:
-            print(f"❌ DEFESA DE {p2_nome.upper()}! Não foi gol.")
-            placar_p2 += 1
-        else:
-            print(f"⚽ GOOOOOOOOL DE {p1_nome.upper()}!")
-            placar_p1 += 1
+document.addEventListener("keydown",e=>teclas[e.key]=true);
+document.addEventListener("keyup",e=>teclas[e.key]=false);
 
-        print(f"Placar parcial: {p1_nome} {placar_p1} x {placar_p2} {p2_nome}")
+function moverJogador(){
 
-    print("\n" + "=" * 40)
-    print("              FIM DE JOGO              ")
-    print("=" * 40)
-    print(f"Placar Final: {p1_nome} {placar_p1} x {placar_p2} {p2_nome}")
+    if(teclas["ArrowUp"]) jogador.y -= jogador.speed;
+    if(teclas["ArrowDown"]) jogador.y += jogador.speed;
+    if(teclas["ArrowLeft"]) jogador.x -= jogador.speed;
+    if(teclas["ArrowRight"]) jogador.x += jogador.speed;
 
-    if placar_p1 > placar_p2:
-        print(f"🏆 {p1_nome} venceu a disputa!")
-    elif placar_p2 > placar_p1:
-        print(f"🏆 {p2_nome} venceu a disputa!")
-    else:
-        print("🤝 Empate perfeito!")
+    jogador.x=Math.max(jogador.r,Math.min(canvas.width-jogador.r,jogador.x));
+    jogador.y=Math.max(jogador.r,Math.min(canvas.height-jogador.r,jogador.y));
+}
 
+function moverCPU(){
 
-if __name__ == "__main__":
-    jogo_penaltis_multiplayer()
+    if(bola.x<cpu.x) cpu.x-=cpu.speed;
+    if(bola.x>cpu.x) cpu.x+=cpu.speed;
+    if(bola.y<cpu.y) cpu.y-=cpu.speed;
+    if(bola.y>cpu.y) cpu.y+=cpu.speed;
+}
+
+function chute(personagem){
+
+    const dx=bola.x-personagem.x;
+    const dy=bola.y-personagem.y;
+
+    const dist=Math.sqrt(dx*dx+dy*dy);
+
+    if(dist<personagem.r+bola.r){
+        bola.vx=dx*0.45;
+        bola.vy=dy*0.45;
+    }
+}
+
+function atualizarBola(){
+
+    bola.x+=bola.vx;
+    bola.y+=bola.vy;
+
+    bola.vx*=0.985;
+    bola.vy*=0.985;
+
+    if(bola.y<bola.r || bola.y>canvas.height-bola.r){
+        bola.vy*=-1;
+    }
+
+    if(bola.x<0){
+        placarVisitante++;
+        reiniciar();
+    }
+
+    if(bola.x>canvas.width){
+        placarCasa++;
+        reiniciar();
+    }
+}
+
+function reiniciar(){
+
+    jogador.x=120;
+    jogador.y=250;
+
+    cpu.x=780;
+    cpu.y=250;
+
+    bola.x=450;
+    bola.y=250;
+    bola.vx=0;
+    bola.vy=0;
+}
+
+function desenharCampo(){
+
+    ctx.fillStyle="#2e8b57";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    ctx.strokeStyle="white";
+    ctx.lineWidth=4;
+
+    ctx.strokeRect(0,0,canvas.width,canvas.height);
+
+    ctx.beginPath();
+    ctx.moveTo(canvas.width/2,0);
+    ctx.lineTo(canvas.width/2,canvas.height);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(canvas.width/2,canvas.height/2,60,0,Math.PI*2);
+    ctx.stroke();
+
+    // Área esquerda
+    ctx.strokeRect(0,160,90,180);
+
+    // Área direita
+    ctx.strokeRect(810,160,90,180);
+}
+
+function desenharJogador(p){
+
+    ctx.beginPath();
+    ctx.fillStyle=p.color;
+    ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle="white";
+    ctx.font="bold 12px Arial";
+    ctx.textAlign="center";
+    ctx.fillText("10",p.x,p.y+4);
+}
+
+function desenharBola(){
+
+    ctx.beginPath();
+    ctx.fillStyle="white";
+    ctx.arc(bola.x,bola.y,bola.r,0,Math.PI*2);
+    ctx.fill();
+}
+
+function desenharPlacar(){
+
+    ctx.fillStyle="white";
+    ctx.font="22px Arial";
+
+    ctx.textAlign="center";
+
+    ctx.fillText(
+        `${timeCasa} ${placarCasa} x ${placarVisitante} ${timeVisitante}`,
+        canvas.width/2,
+        35
+    );
+}
+
+function loop(){
+
+    moverJogador();
+    moverCPU();
+
+    chute(jogador);
+    chute(cpu);
+
+    atualizarBola();
+
+    desenharCampo();
+    desenharJogador(jogador);
+    desenharJogador(cpu);
+    desenharBola();
+    desenharPlacar();
+
+    requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+
+</body>
+</html>
